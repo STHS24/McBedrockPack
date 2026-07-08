@@ -1,1 +1,1 @@
-execute as @a[tag=team_purple] run function off
+execute as @a[tag=t1] run function off

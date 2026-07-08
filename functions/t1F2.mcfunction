@@ -1,1 +1,1 @@
-execute as @a[tag=team_purple] run function f2
+execute as @a[tag=t1] run function f2

@@ -23,7 +23,7 @@ tag @s[tag=team_yellow] remove yellow_2
 tag @s[tag=team_yellow] remove yellow_3
 
 # --- TIME ROXO ---
-tag @s[tag=team_purple] add purple_1
-tag @s[tag=team_purple] remove purple_0
-tag @s[tag=team_purple] remove purple_2
-tag @s[tag=team_purple] remove purple_3
+tag @s[tag=t1] add t1_1
+tag @s[tag=t1] remove t1_0
+tag @s[tag=t1] remove t1_2
+tag @s[tag=t1] remove t1_3

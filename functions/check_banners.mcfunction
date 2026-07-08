@@ -1,7 +1,7 @@
 # ========================================================
-# INVISIBILIDADE AUTOMÁTICA DOS SUPORTES
+# EFEITO AUTOMÁTICO DOS SUPORTES
 # ========================================================
-effect @e[type=armor_stand,name="banner_purple",hasitem={item=banner,data=5,location=slot.weapon.mainhand}] invisibility 99999 0 true
+effect @e[type=armor_stand,name="t1a",hasitem={item=banner,data=5,location=slot.weapon.mainhand}] resistance 2 1 false
 
 
 # ========================================================
@@ -9,5 +9,5 @@ effect @e[type=armor_stand,name="banner_purple",hasitem={item=banner,data=5,loca
 # ========================================================
 
 # --- TIME ROXO ---
-execute unless entity @e[type=armor_stand,name="banner_purple",hasitem={item=banner,data=5,location=slot.weapon.mainhand}] run execute as @a[tag=team_purple] run function t1F1
-execute if entity @e[type=armor_stand,name="banner_purple",hasitem={item=banner,data=5,location=slot.weapon.mainhand}] run execute as @a[tag=team_purple] run function t1Off
+execute unless entity @e[type=armor_stand,name="t1a",hasitem={item=banner,data=5,location=slot.weapon.mainhand}] run execute as @a[tag=t1] run function t1F1
+execute if entity @e[type=armor_stand,name="t1a",hasitem={item=banner,data=5,location=slot.weapon.mainhand}] run execute as @a[tag=t1] run function t1Off
