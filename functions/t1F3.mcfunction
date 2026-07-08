@@ -1,0 +1,1 @@
+execute as @a[tag=team_purple] run function f3

@@ -1,5 +1,6 @@
 {
   "values": [
-    "loop_debuffs"
+    "loop_debuffs",
+    "check_banners"
   ]
 }
