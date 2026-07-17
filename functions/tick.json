@@ -1,7 +1,11 @@
 {
   "values": [
     "loop_debuffs",
-    "check_banners",
-    "timer_manager"
+    "cb1",
+    "cb2",
+    "cb3",
+    "tm1",
+    "tm2",
+    "tm3"
   ]
 }
