@@ -1,1 +1,0 @@
-execute if score t1 pvp_timer matches 1..1728000 run execute as @a[tag=t1] run function t1F1

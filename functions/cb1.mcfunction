@@ -1,1 +1,0 @@
-execute unless entity @e[type=armor_stand,name="t1a",hasitem={item=banner,data=5,location=slot.weapon.mainhand}] run scoreboard players add t1 pvp_timer 1

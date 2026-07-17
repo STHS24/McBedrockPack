@@ -1,1 +1,0 @@
-execute if entity @e[type=armor_stand,name="t1a",hasitem={item=banner,data=5,location=slot.weapon.mainhand}] run scoreboard players set t1 pvp_timer 0
