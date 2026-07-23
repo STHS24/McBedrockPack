@@ -1,169 +1,177 @@
-// scripts/main.js
-import { world, system, BlockPermutation } from "@minecraft/server";
-import { bannerHelper } from "./banner_helper";
+import { world, system, ItemStack } from "@minecraft/server";
 
+// ==========================================
+// 1. CONFIGURAÇÃO DOS TIMES E BANDEIRAS
+// ==========================================
+const TEAM_BANNERS = [
+    { bannerName: "§cRed Team Flag", teamTag: "time_red" },
+    { bannerName: "§9Blue Team Flag", teamTag: "time_blue" },
+    { bannerName: "§aGreen Team Flag", teamTag: "time_green" }
+];
 
-// === Debuff phases (tick-based, matching existing scoreboard windows) ===
-// Phase 1: 1..1728000
-// Phase 2: 1728001..13824000
-// Phase 3: 13824001..
-const PHASE_1_TICKS = 1728000;
-const PHASE_2_TICKS = 13824000;
+// VALORES AJUSTADOS PARA TESTE RÁPIDO (Em minutos reais):
+const MINUTES_FOR_PHASE_2 = 0.5; // 30 segundos para testes (Mude para 20 depois)
+const MINUTES_FOR_PHASE_3 = 1.0; // 60 segundos para testes (Mude para 140 depois)
 
-// Apply effects every N ticks to reduce overhead.
-const EFFECT_REAPPLY_EVERY_TICKS = 10;
+const CHECK_INTERVAL = 20; // Checa tudo a cada 1 segundo (20 ticks)
 
-const OVERWORLD = world.getDimension("overworld");
+const teamLossTimers = {
+    time_red: 0, time_blue: 0, time_green: 0
+};
 
-// Team colors you currently tag in functions.
-const TEAMS = ["red", "blue", "green", "yellow"];
+// ==========================================
+// 2. SISTEMA DE COLOCAÇÃO E QUEBRA (PRESERVAR NOMES)
+// ==========================================
 
-/**
- * Determine team from banner placement.
- *
- * NOTE: Option B (blocks) requires we can identify team-owned banners.
- * This implementation assumes your banners are placed as real banner blocks
- * and are uniquely identifiable by their block permutation pattern (or via
- * nearby armor_stand name if you still keep them).
- *
- * For now we implement a minimal, configurable placeholder mapping:
- * - We read the block's "color" via its permutation when possible.
- * - If permutation doesn't expose color reliably, you must provide a tagging
- *   mechanism (e.g., place a marker block next to it).
- */
-function getBannerTeamFromBlock(block) {
-  // Bedrock scripting can expose permutation; keep safe.
-  const perm = block.permutation;
-  const q = perm.getState?.("color") ?? perm.getState?.("BaseColor");
-  if (!q) return null;
-  const color = String(q).toLowerCase();
-  if (TEAMS.includes(color)) return color;
-  // Some engines return "red" etc. directly.
-  if (color.includes("red")) return "red";
-  if (color.includes("blue")) return "blue";
-  if (color.includes("green")) return "green";
-  if (color.includes("yellow")) return "yellow";
-  return null;
-}
+world.afterEvents.playerPlaceBlock.subscribe((event) => {
+    const player = event.player;
+    const block = event.block;
+    
+    if (block.typeId.includes("banner")) {
+        const inventory = player.getComponent("minecraft:inventory");
+        const item = inventory.container.getItem(player.selectedSlotIndex);
 
-// Track banner break state per team.
-// brokenAtTick[team] = world tick count when banner was first observed missing.
-const brokenAtTick = new Map(TEAMS.map((t) => [t, null]));
-
-// Cache banner block locations once discovered.
-// bannerLocations[team] = { x, y, z }
-const bannerLocations = new Map(TEAMS.map((t) => [t, null]));
-
-let initialized = false;
-let lastTick = 0;
-let effectCounter = 0;
-
-function applyDebuffs(player, phase) {
-  // phase: 1 | 2 | 3
-  // weakness/slowness in phase 1+2, hunger only in phase 3.
-  if (phase === 1 || phase === 2 || phase === 3) {
-    player.addEffect("weakness", 12, 0, false);
-    player.addEffect("slowness", 12, 0, false);
-  }
-  if (phase === 3) {
-    player.addEffect("hunger", 12, 0, false);
-  }
-}
-
-function clearDebuffs(player) {
-  // duration 0 clears.
-  player.addEffect("weakness", 0, 0, false);
-  player.addEffect("slowness", 0, 0, false);
-  player.addEffect("hunger", 0, 0, false);
-}
-
-function getPhaseForTeam(team, nowTick) {
-  const bt = brokenAtTick.get(team);
-  if (bt === null) return 0;
-  const elapsed = nowTick - bt;
-  if (elapsed <= 0) return 0;
-  if (elapsed <= PHASE_1_TICKS) return 1;
-  if (elapsed <= PHASE_2_TICKS) return 2;
-  return 3;
-}
-
-function ensureInit() {
-  if (initialized) return;
-  initialized = true;
-
-  // Discover banners by scanning the area is expensive.
-  // For a simple server, you should define banner positions via constants.
-  // For now, we try to locate banners near spawn within a radius.
-  const spawn = OVERWORLD.getBlock({ x: 0, y: 64, z: 0 });
-  void spawn;
-
-  // TODO: Replace this discovery with your actual banner coordinates.
-  // For now, no discovery means no debuffs will trigger.
-}
-
-function setBrokenIfBannerMissing(team, loc, nowTick) {
-  if (!loc) return;
-  const block = OVERWORLD.getBlock({ x: loc.x, y: loc.y, z: loc.z });
-  if (!block) return;
-
-  // If banner block isn't present, consider it broken.
-  // Banner block ids vary; we check for "banner" substring.
-  const id = block.typeId ?? "";
-  const isBanner = String(id).toLowerCase().includes("banner");
-
-  if (!isBanner) {
-    if (brokenAtTick.get(team) === null) {
-      brokenAtTick.set(team, nowTick);
+        if (item && item.nameTag && item.nameTag.includes("§")) {
+            const dimension = world.getDimension(player.dimension.id);
+            const anchor = dimension.spawnEntity("minecraft:interaction", {
+                x: block.location.x + 0.5, y: block.location.y, z: block.location.z + 0.5
+            });
+            anchor.addTag("SpecialBannerAnchor");
+            anchor.setDynamicProperty("saved_name", item.nameTag);
+            
+            // DEBUG: Confirmação de posicionamento
+            player.sendMessage(`§e[DEBUG] Âncora criada para a bandeira: ${item.nameTag} em X:${block.location.x} Y:${block.location.y} Z:${block.location.z}`);
+        }
     }
-  }
-}
+});
 
-// One-time helper trigger (TEST ONLY):
-// Tag players first if you don't want everyone spamming chat.
-// Change this to your preferred trigger later.
-let helperRan = false;
-function tick() {
+world.beforeEvents.playerBreakBlock.subscribe((event) => {
+    const player = event.player;
+    const block = event.block;
+    const dimension = world.getDimension(player.dimension.id);
 
-  ensureInit();
+    if (block.typeId.includes("banner")) {
+        const anchors = dimension.getEntities({
+            type: "minecraft:interaction",
+            tags: ["SpecialBannerAnchor"],
+            location: { x: block.location.x + 0.5, y: block.location.y, z: block.location.z + 0.5 },
+            maxDistance: 0.6
+        });
 
-  const nowTick = system.currentTick ?? lastTick + 1;
-  lastTick = nowTick;
+        if (anchors.length > 0) {
+            const anchor = anchors[0];
+            const savedName = anchor.getDynamicProperty("saved_name");
+            event.cancel = true; 
 
-  // Run banner inspection once at startup.
-  // Remove/disable after you collect chat output.
-  if (!helperRan) {
-    helperRan = true;
-    const players = OVERWORLD.getPlayers();
-    bannerHelper.runFor(players);
-  }
-
-  // Detect banner break state per team.
-  for (const team of TEAMS) {
-    const loc = bannerLocations.get(team);
-    setBrokenIfBannerMissing(team, loc, nowTick);
-  }
-
-  effectCounter++;
-  if (effectCounter < EFFECT_REAPPLY_EVERY_TICKS) return;
-  effectCounter = 0;
-
-  // Apply phase debuffs based on broken state.
-  for (const team of TEAMS) {
-    const phase = getPhaseForTeam(team, nowTick);
-
-    // Your players are tagged with team_red/team_blue/... in the existing pack.
-    const tag = `team_${team}`;
-    for (const p of OVERWORLD.getPlayers({ tags: [tag] })) {
-      if (phase === 0) {
-        clearDebuffs(p);
-      } else {
-        applyDebuffs(p, phase);
-      }
+            system.run(() => {
+                block.setType("minecraft:air");
+                const inventory = player.getComponent("minecraft:inventory");
+                const newItem = new ItemStack(block.typeId, 1);
+                newItem.nameTag = savedName;
+                inventory.container.addItem(newItem);
+                
+                // DEBUG: Confirmação de quebra segura
+                player.sendMessage(`§e[DEBUG] Bloco interceptado! Devolvendo item nomeado: ${savedName}`);
+                anchor.remove();
+            });
+        }
     }
-  }
+});
+
+// ==========================================
+// 3. RASTREAMENTO, CRONÔMETRO E DEBUFFS POR FASE
+// ==========================================
+
+system.runInterval(() => {
+    const teamHasLostBanner = {
+        time_red: false, time_blue: false, time_green: false
+    };
+
+    // 1. Escaneia inventários
+    for (const player of world.getAllPlayers()) {
+        const inventory = player.getComponent("minecraft:inventory");
+        if (!inventory || !inventory.container) continue;
+
+        for (let i = 0; i < inventory.container.size; i++) {
+            const item = inventory.container.getItem(i);
+            if (item && item.typeId.includes("banner") && item.nameTag) {
+                const matchedBanner = TEAM_BANNERS.find(b => b.bannerName === item.nameTag);
+                if (matchedBanner) {
+                    const isOwnerOfBanner = player.hasTag(matchedBanner.teamTag);
+                    
+                    // DEBUG: Mostra no chat quem está segurando qual bandeira
+                    player.sendMessage(`§7[DEBUG] ${player.name} está segurando a bandeira [${item.nameTag}]. Dono legítimo? ${isOwnerOfBanner}`);
+
+                    if (!isOwnerOfBanner) {
+                        teamHasLostBanner[matchedBanner.teamTag] = true;
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Processa o tempo e aplica os debuffs
+    for (const config of TEAM_BANNERS) {
+        const currentTeamTag = config.teamTag;
+        const isCurrentlyLost = teamHasLostBanner[currentTeamTag];
+        const teamPlayers = world.getAllPlayers().filter(p => p.hasTag(currentTeamTag));
+
+        if (isCurrentlyLost) {
+            teamLossTimers[currentTeamTag] += 1;
+            const minutesElapsed = teamLossTimers[currentTeamTag] / 60;
+            const secondsElapsed = teamLossTimers[currentTeamTag]; // Contador visual em segundos
+
+            let currentPhase = 1;
+            if (minutesElapsed >= MINUTES_FOR_PHASE_3) {
+                currentPhase = 3;
+            } else if (minutesElapsed >= MINUTES_FOR_PHASE_2) {
+                currentPhase = 2;
+            }
+
+            // DEBUG: Alerta de tempo correndo enviado para o chat do console/jogador ativo
+            for (const p of world.getAllPlayers()) {
+                p.sendMessage(`§e[DEBUG CLOCK] Time [${currentTeamTag}] sem bandeira por: ${secondsElapsed}s (Fase Ativa: ${currentPhase})`);
+            }
+
+            for (const player of teamPlayers) {
+                updatePhaseTags(player, currentPhase);
+
+                if (currentPhase === 1) {
+                    player.runCommandAsync("effect @s weakness 2 0 true");
+                } 
+                else if (currentPhase === 2) {
+                    player.runCommandAsync("effect @s weakness 2 0 true");
+                    player.runCommandAsync("effect @s slowness 2 0 true");
+                } 
+                else if (currentPhase === 3) {
+                    player.runCommandAsync("effect @s weakness 2 0 true");
+                    player.runCommandAsync("effect @s slowness 2 0 true");
+                    player.runCommandAsync("effect @s hunger 2 0 true");
+                }
+            }
+        } else {
+            if (teamLossTimers[currentTeamTag] > 0) {
+                teamLossTimers[currentTeamTag] = 0;
+                for (const player of teamPlayers) {
+                    clearAllPhaseTags(player);
+                    player.sendMessage("§aSua bandeira foi protegida! Todos os cronômetros e debuffs foram zerados.");
+                }
+            }
+        }
+    }
+}, CHECK_INTERVAL);
+
+function updatePhaseTags(player, phase) {
+    const targetTag = `debuff_stage_${phase}`;
+    if (!player.hasTag(targetTag)) {
+        clearAllPhaseTags(player);
+        player.addTag(targetTag);
+        player.sendMessage(`§cAlerta! O debuff do seu time progrediu para a §lFase ${phase}§r§c.`);
+    }
 }
 
-system.runInterval(tick, 10);
-
-
-
+function clearAllPhaseTags(player) {
+    if (player.hasTag("debuff_stage_1")) player.removeTag("debuff_stage_1");
+    if (player.hasTag("debuff_stage_2")) player.removeTag("debuff_stage_2");
+    if (player.hasTag("debuff_stage_3")) player.removeTag("debuff_stage_3");
+}

@@ -1,1 +1,0 @@
-execute as @a[tag=t1] run function f3
